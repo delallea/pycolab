@@ -224,6 +224,7 @@ class JupyWindow(object):
         """
         See `Window.noutrefresh()`.
         """
+        self._pixels.fill(0)
         pos_y = 0
         for y in range(self._n_lines):
             pos_x = 0
