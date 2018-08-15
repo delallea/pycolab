@@ -20,11 +20,12 @@ from __future__ import print_function
 
 import collections
 import copy
-import curses
 import datetime
 import textwrap
 
 from pycolab import cropping
+import curses
+from pycolab import jupycurses as curses
 from pycolab.protocols import logging as plab_logging
 
 import six
