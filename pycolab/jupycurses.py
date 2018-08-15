@@ -2,6 +2,9 @@
 Minimal implementation of the `curses` API to work within a Jupyter notebook.
 """
 
+import time
+from collections import deque
+
 import numpy as np
 import PIL.ImageFont
 
@@ -17,18 +20,24 @@ COLORS = 256
 # Custom constants.
 
 _A_COLOR_OFFSET = 24  # in the attributes bitmask, colors start at this offset
-_CELL_PIXEL_HEIGHT = 10  # height of a single cell, in pixels
+_CELL_PIXEL_HEIGHT = 11  # height of a single cell, in pixels
 _CELL_PIXEL_WIDTH = 10  # width of a single cell, in pixels
 _COLOR_PAIRS = {
     0: (COLOR_WHITE, COLOR_BLACK),
 }
 _MAX_COLOR_INTENSITY = 1000
+_MAX_RGB_VALUE = 255
 _COLORS = {
     COLOR_BLACK: (0, 0, 0),
     COLOR_WHITE: (_MAX_COLOR_INTENSITY, _MAX_COLOR_INTENSITY, _MAX_COLOR_INTENSITY),
 }
-_SCREEN_HEIGHT = 100  # number of rows
+_COLOR_TO_RGB = {}  # map a color number to a numpy array of RGB values
+_SCREEN_HEIGHT = 50  # number of rows
 _SCREEN_WIDTH = 80  # number of columns
+_DEFAULT_SLEEP_PERIOD = 0.1  # wait for this number of seconds while waiting for a command
+_ALL_WINDOWS = []  # list of all active windows
+_PIXELS = np.zeros((_SCREEN_HEIGHT * _CELL_PIXEL_HEIGHT, _SCREEN_WIDTH * _CELL_PIXEL_WIDTH, 3), dtype=np.uint8)  # RGB
+_CALLBACKS = []  # callback functions to be called when the screen is updated
 
 # More "official" `curses` constants defined from custom ones.
 
@@ -39,30 +48,48 @@ A_COLOR = int(np.uint64(-1)) - (2 ** _A_COLOR_OFFSET - 1)
 
 class JupyWindow(object):
 
-    def __init__(self, max_x=_SCREEN_WIDTH, max_y=_SCREEN_HEIGHT, begin_x=0, begin_y=0):
+    def __init__(self, n_lines=_SCREEN_HEIGHT, n_columns=_SCREEN_WIDTH, begin_y=0, begin_x=0):
         """
         Constructor.
 
-        :param max_x: Number of columns.
-        :param max_y: Number of rows.
-        :param begin_x: X coordinate of the top-left corner of the window.
-        :param begin_y: Y coordinate of the top-left corner of the window.
+        :param n_lines: Number of lines.
+        :param n_columns: Number of columns.
+        :param begin_y: Y coordinate of the top-left corner of the window (0 = top).
+        :param begin_x: X coordinate of the top-left corner of the window (0 = left).
         """
-        self._max_x = max_x
-        self._max_y = max_y
-        self._begin_x = begin_x
+        self._n_lines = n_lines
+        self._n_columns = n_columns
         self._begin_y = begin_y
+        self._begin_x = begin_x
         # Set blocking or non-blocking behavior:
         #   - if `None`: blocking indefinitely
         #   - otherwise, block only for this amount of seconds (can be zero for non-blocking) before returning
         self._block_timeout = None
-        self._data = np.zeros((self._max_x, self._max_y), dtype=np.uint32)
+        self._data = np.zeros((self._n_lines, self._n_columns), dtype=np.uint32)
         # The list of items that may be plotted into a grid cell.
         self._items = [None]
         # Map a tuple identifying an item that can be plotted in a grid cell to its index in `_items`.
         self._item_key_to_idx = {None: 0}
         # The font to use to plot characters.
         self._font = PIL.ImageFont.load_default()
+        # Current position of the cursor.
+        self._current_y = 0
+        self._current_x = 0
+        # The window buffer (RGB values).
+        self._pixels = np.zeros((self._n_lines * _CELL_PIXEL_HEIGHT, self._n_columns * _CELL_PIXEL_WIDTH, 3),
+                                dtype=np.uint8)
+        # Commands sent by the user.
+        self._commands = deque()
+
+    def _addch(self, y, x, ch, attr=None):
+        """
+        Add a character in the specific position.
+
+        `ch` may either be an integer or a character.
+        """
+        if isinstance(ch, int):
+            ch = chr(ch)
+        self._add_item(y=y, x=x, key=('char', ch, attr))
 
     def _add_item(self, y, x, key):
         """
@@ -73,7 +100,7 @@ class JupyWindow(object):
         except KeyError:
             # Must create item first.
             item_idx = self._create_item(key=key)
-        self._data[x, y] = item_idx
+        self._data[y, x] = item_idx
 
     def _create_char_item(self, ch, attr):
         """
@@ -90,14 +117,17 @@ class JupyWindow(object):
         im = self._font.getmask(ch)
         im = im.resize((_CELL_PIXEL_WIDTH, _CELL_PIXEL_HEIGHT))
         # Create numpy array with (binary) pixel values.
-        data = np.zeros(list(reversed(im.size)), dtype=np.uint8)
+        data = np.zeros((im.size[1], im.size[0], 1), dtype=np.uint8)
         for i in range(data.shape[0]):
             for j in range(data.shape[1]):
-                data[i, j] = int(im.getpixel((j, i)) > 0)
+                data[i, j, 0] = int(im.getpixel((j, i)) > 0)
         # Convert to RGB.
-        color_number = (attr & A_COLOR) >> _A_COLOR_OFFSET
-        rgb = np.array(color_content(color_number), dtype=np.uint8)  # TODO CONTINUE HERE MUST DIVIDE BY MAX * 255
-        item = data * rgb
+        pair_number = (attr & A_COLOR) >> _A_COLOR_OFFSET
+        fg, bg = pair_content(pair_number)
+        fg_rgb, bg_rgb = (_get_rgb_array(c) for c in [fg, bg])
+        item = np.where(data > 0, fg_rgb, bg_rgb)
+        # assert ch == ' ' or item.sum() > 0, (ch, attr)
+        return item
 
     def _create_item(self, key):
         """
@@ -112,23 +142,33 @@ class JupyWindow(object):
         else:
             raise NotImplementedError(item_type)
         item_idx = len(self._items)
+        # noinspection PyTypeChecker
         self._items.append(item)
         self._item_key_to_idx[key] = item_idx
         return item_idx
 
-    def addch(self, y, x, ch, attr=None):
+    def addch(self, *args):
         """
         See `Window.addch()`.
         """
-        self._add_item(y=y, x=x, key=('char', ch, attr))
+        if len(args) <= 2:
+            ch = args[0]
+            y = self._current_y
+            x = self._current_x
+        else:
+            y, x, ch = args[0:3]
+        assert isinstance(ch, int)
+        attr = args[-1] if len(args) % 2 == 0 else None
+        self._addch(y=y, x=x, ch=ch, attr=attr)
+        self._current_y = y
+        self._current_x = x + 1
 
     def addstr(self, y, x, msg, attr=None):
         """
         See `Window.addstr()`.
         """
         for i, ch in enumerate(msg):
-            self.addch(y=y, x=x + i, ch=ch, attr=attr)
-
+            self._addch(y=y, x=x + i, ch=ch, attr=attr)
 
     def erase(self):
         """
@@ -136,12 +176,65 @@ class JupyWindow(object):
         """
         self._data.fill(0)
 
+    def fill_screen(self, screen):
+        """
+        Fill the screen with pixels.
+
+        :param screen: A numpy array representing the screen buffer (RGB pixels).
+        """
+        start_y = self._begin_y * _CELL_PIXEL_HEIGHT
+        start_x = self._begin_x * _CELL_PIXEL_WIDTH
+        stop_y = start_y + self._pixels.shape[0]
+        stop_x = start_x + self._pixels.shape[1]
+        screen[start_y:stop_y, start_x:stop_x, :] = self._pixels
+
+    def getch(self):
+        """
+        See `Window.getch()`.
+        """
+        stop_time = None if self._block_timeout is None else time.perf_counter() + self._block_timeout
+        while not self._commands:
+            if stop_time is None:
+                time.sleep(_DEFAULT_SLEEP_PERIOD)
+            elif time.perf_counter() >= stop_time:
+                break
+            else:
+                # noinspection PyTypeChecker
+                time.sleep(max(0, stop_time - time.perf_counter()))
+        if self._commands:
+            return self._commands.popleft()
+        else:
+            return -1
+
     def getmaxyx(self):
         """
         See `Window.getmaxyx()`.
         :return:
         """
-        return self._max_y, self._max_x
+        return self._n_lines, self._n_columns
+
+    def move(self, new_y, new_x):
+        """
+        See `Window.move()`.
+        """
+        self._current_y = new_y
+        self._current_x = new_x
+
+    def noutrefresh(self):
+        """
+        See `Window.noutrefresh()`.
+        """
+        pos_y = 0
+        for y in range(self._n_lines):
+            pos_x = 0
+            for x in range(self._n_columns):
+                item_idx = self._data[y, x]
+                if item_idx > 0:
+                    item = self._items[item_idx]
+                    # print(pos_y, pos_x, item_idx)
+                    self._pixels[pos_y:pos_y + _CELL_PIXEL_HEIGHT, pos_x:pos_x + _CELL_PIXEL_WIDTH, :] = item
+                pos_x += _CELL_PIXEL_WIDTH
+            pos_y += _CELL_PIXEL_HEIGHT
 
     def timeout(self, delay):
         """
@@ -151,6 +244,20 @@ class JupyWindow(object):
             self._block_timeout = None
         else:
             self._block_timeout = delay / 1000.
+
+
+def _get_rgb_array(color_number):
+    """
+    Return the RGB numpy array (of dtype `uint8`) associated to the given color number.
+    """
+    try:
+        return _COLOR_TO_RGB[color_number]
+    except KeyError:
+        rgb = np.array(color_content(color_number), dtype=np.float64)
+        rgb *= _MAX_RGB_VALUE / _MAX_COLOR_INTENSITY
+        rgb = np.minimum(rgb, _MAX_RGB_VALUE).astype(np.uint8)
+        _COLOR_TO_RGB[color_number] = rgb
+        return rgb
 
 
 def can_change_color():
@@ -184,6 +291,17 @@ def curs_set(visibility):
     pass
 
 
+def doupdate():
+    """
+    See `curses.doupdate()`.
+    """
+    _PIXELS.fill(0)
+    for window in _ALL_WINDOWS:
+        window.fill_screen(_PIXELS)
+    for callback in _CALLBACKS:
+        callback()
+
+
 def init_color(color_number, r, g, b):
     """
     See `curses.init_color()`.
@@ -199,7 +317,9 @@ def init_pair(pair_number, fg, bg):
 
 
 def newwin(nlines=_SCREEN_HEIGHT, ncols=_SCREEN_WIDTH, begin_y=0, begin_x=0):
-    return JupyWindow(max_x=ncols, max_y=nlines, begin_x=begin_x, begin_y=begin_y)
+    window = JupyWindow(n_lines=nlines, n_columns=ncols, begin_x=begin_x, begin_y=begin_y)
+    _ALL_WINDOWS.append(window)
+    return window
 
 
 def pair_content(pair_number):
@@ -209,9 +329,19 @@ def pair_content(pair_number):
     return _COLOR_PAIRS[pair_number]
 
 
+def register_callback(func):
+    """
+    Register a callback to be called whenever the screen is updated.
+
+    :param func: The function to be called (with no parameter).
+    """
+    _CALLBACKS.append(func)
+
+
 def wrapper(func):
     """
     See `curses.wrapper()`.
     """
     window = JupyWindow()
+    _ALL_WINDOWS.append(window)
     func(window)
