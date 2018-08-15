@@ -2,17 +2,21 @@
 Minimal implementation of the `curses` API to work within a Jupyter notebook.
 """
 
+import io
+import sys
 import time
 from collections import deque
 
+import ipywidgets
 import numpy as np
+import PIL.Image
 import PIL.ImageFont
 
 
 # "Official" `curses` constants.
 
 # noinspection PyUnresolvedReferences
-from curses import COLOR_BLACK, COLOR_WHITE, KEY_NPAGE, KEY_PPAGE
+from curses import COLOR_BLACK, COLOR_WHITE, KEY_DOWN, KEY_LEFT, KEY_NPAGE, KEY_PPAGE, KEY_RIGHT, KEY_UP
 
 COLOR_PAIRS = 65536
 COLORS = 256
@@ -32,12 +36,15 @@ _COLORS = {
     COLOR_WHITE: (_MAX_COLOR_INTENSITY, _MAX_COLOR_INTENSITY, _MAX_COLOR_INTENSITY),
 }
 _COLOR_TO_RGB = {}  # map a color number to a numpy array of RGB values
-_SCREEN_HEIGHT = 50  # number of rows
+_SCREEN_HEIGHT = 40  # number of rows
 _SCREEN_WIDTH = 80  # number of columns
 _DEFAULT_SLEEP_PERIOD = 0.1  # wait for this number of seconds while waiting for a command
 _ALL_WINDOWS = []  # list of all active windows
 _PIXELS = np.zeros((_SCREEN_HEIGHT * _CELL_PIXEL_HEIGHT, _SCREEN_WIDTH * _CELL_PIXEL_WIDTH, 3), dtype=np.uint8)  # RGB
 _CALLBACKS = []  # callback functions to be called when the screen is updated
+_COMMANDS = deque()  # commands sent by the user
+_IMAGE_FORMAT = 'bmp'  # image format when converting bytes to image
+_IMAGE = None
 
 # More "official" `curses` constants defined from custom ones.
 
@@ -78,8 +85,6 @@ class JupyWindow(object):
         # The window buffer (RGB values).
         self._pixels = np.zeros((self._n_lines * _CELL_PIXEL_HEIGHT, self._n_columns * _CELL_PIXEL_WIDTH, 3),
                                 dtype=np.uint8)
-        # Commands sent by the user.
-        self._commands = deque()
 
     def _addch(self, y, x, ch, attr=None):
         """
@@ -193,7 +198,7 @@ class JupyWindow(object):
         See `Window.getch()`.
         """
         stop_time = None if self._block_timeout is None else time.perf_counter() + self._block_timeout
-        while not self._commands:
+        while not _COMMANDS:
             if stop_time is None:
                 time.sleep(_DEFAULT_SLEEP_PERIOD)
             elif time.perf_counter() >= stop_time:
@@ -201,9 +206,10 @@ class JupyWindow(object):
             else:
                 # noinspection PyTypeChecker
                 time.sleep(max(0, stop_time - time.perf_counter()))
-        if self._commands:
-            return self._commands.popleft()
+        if _COMMANDS:
+            return _COMMANDS.popleft()
         else:
+            # return KEY_RIGHT
             return -1
 
     def getmaxyx(self):
@@ -303,6 +309,7 @@ def doupdate():
         callback()
 
 
+
 def init_color(color_number, r, g, b):
     """
     See `curses.init_color()`.
@@ -330,6 +337,17 @@ def pair_content(pair_number):
     return _COLOR_PAIRS[pair_number]
 
 
+def pixels_to_image():
+    """
+    Convert raw pixel data to ipywidgets image format.
+    """
+    with io.BytesIO() as b_out:
+        im = PIL.Image.fromarray(_PIXELS, mode='RGB')
+        # im = im.resize(size=(width, height), resample=PIL.Image.NEAREST)  # blurry without this step
+        im.save(b_out, format=_IMAGE_FORMAT)
+        return b_out.getvalue()
+
+
 def register_callback(func):
     """
     Register a callback to be called whenever the screen is updated.
@@ -337,6 +355,27 @@ def register_callback(func):
     :param func: The function to be called (with no parameter).
     """
     _CALLBACKS.append(func)
+
+
+def replace_curses():
+    """
+    Register this module as "curses" in `sys.modules`, so that anyone trying to use `curses` will use this one instead.
+    """
+    sys.modules['curses'] = sys.modules['jupycurses']
+
+
+def update_image():
+    """
+    Update and return the `ipywidgets.Image` corresponding to the current state of pixels.
+    """
+    global _IMAGE
+    if _IMAGE is None:
+        _IMAGE = ipywidgets.Image(
+            value=pixels_to_image(), format=_IMAGE_FORMAT, height=_PIXELS.shape[0], width=_PIXELS.shape[1])
+        register_callback(update_image)
+    else:
+        _IMAGE.value = pixels_to_image()
+    return _IMAGE
 
 
 def wrapper(func):
