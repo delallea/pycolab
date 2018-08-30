@@ -32,7 +32,7 @@ class Observation(collections.namedtuple('Observation', ['board', 'layers'])):
   (although code in this module and others may help you change them to something
   more palatable to you). There are two properties:
 
-  * `board`: a 2-D numpy array of type uint8. This is, in a sense, an ASCII-art
+  * `board`: a 2-D numpy array of type uint32. This is, in a sense, an ASCII-art
      diagram, and when a `BaseObservationRenderer` creates an `Observation`, the
      values are the actual ASCII character values that are arranged on different
      parts of the game board by the `Backdrop` and the `Sprite`s and `Drape`s.
@@ -88,7 +88,7 @@ class BaseObservationRenderer(object):
       characters: an iterable of ASCII characters that are allowed to appear
           on the game board. (A string will work as an argument here.)
     """
-    self._board = np.zeros((rows, cols), dtype=np.uint8)
+    self._board = np.zeros((rows, cols), dtype=np.uint32)
     self._layers = {
         char: np.zeros((rows, cols), dtype=np.bool_) for char in characters}
 
@@ -96,7 +96,7 @@ class BaseObservationRenderer(object):
     """Reset the "canvas" of this `BaseObservationRenderer`.
 
     After a `clear()`, a call to `render()` would return an `Observation` whose
-    `board` contains only `np.uint8(0)` values and whose layers contain only
+    `board` contains only `np.uint32(0)` values and whose layers contain only
     `np.bool_(False)` values.
     """
     self._board.fill(0)
@@ -109,7 +109,7 @@ class BaseObservationRenderer(object):
     `Backdrop` data is added to an observation.
 
     Args:
-      curtain: a 2-D `np.uint8` array whose dimensions are the same as this
+      curtain: a 2-D `np.uint32` array whose dimensions are the same as this
           `BaseObservationRenderer`'s.
     """
     np.copyto(self._board, curtain, casting='no')
@@ -217,9 +217,9 @@ class ObservationCharacterRepainter(object):
     # means we will need a mapping where (a) values are numerical ASCII
     # codepoints instead of characters, and (b) we supply identity mappings for
     # all ASCII characters not in character_mapping.
-    value_mapping = {chr(x): np.uint8(x) for x in range(128)}
+    value_mapping = {chr(x): np.uint32(x) for x in range(128)}
     value_mapping.update(
-        {k: np.uint8(ord(v)) for k, v in six.iteritems(character_mapping)})
+        {k: np.uint32(ord(v)) for k, v in six.iteritems(character_mapping)})
 
     # With that, we construct the infrastructure that can repaint the characters
     # used in the observation board.

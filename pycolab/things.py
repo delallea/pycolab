@@ -75,14 +75,14 @@ class Backdrop(object):
         super(MyCoolBackdrop, self).__init__(curtain, palette)
 
     Args:
-      curtain: A 2-D numpy array with dtype `uint8`, which will be "owned" by
+      curtain: A 2-D numpy array with dtype `uint32`, which will be "owned" by
           this `Backdrop` and made accessible at `self.curtain`. Values in this
           array will be painted onto the game board first at each gameplay
           iteration. Subclasses of `Backdrop` will update the backdrop by
           changing the data inside `self.curtain`. May already have items in
           it before it gets received by `__init__` (for example, it may have
           been populated from an ASCII-art diagram).
-      palette: A handy mapping from characters to the corresponding `uint8`
+      palette: A handy mapping from characters to the corresponding `uint32`
           values that you should use to update `self.curtain`. Characters that
           are legal Python names can be accessed using property notation, (e.g.
           `self.palette.M`); for others, you'll need to do dict-style lookups
@@ -119,10 +119,10 @@ class Backdrop(object):
           begins, however, it is guaranteed to be None; the update that this
           Sprite produces then will be combined updates from other Things to
           generate the first observation of the game.
-      board: A 2-D numpy array with dtype `uint8` containing the completely
+      board: A 2-D numpy array with dtype `uint32` containing the completely
           rendered game board from the last board repaint (which usually means
           the last game iteration; see `Engine` docs for details). Recall that
-          Python's `chr` method can turn `uint8` values into single-character
+          Python's `chr` method can turn `uint32` values into single-character
           strings.
       layers: A feature-map representation of `board` (and so also current to
           the last board repaint); specifically, a dict mapping all characters
@@ -218,10 +218,10 @@ class Drape(object):
           begins, however, it is guaranteed to be None; the update that this
           Sprite produces then will be combined updates from other Things to
           generate the first observation of the game.
-      board: A 2-D numpy array with dtype `uint8` containing the completely
+      board: A 2-D numpy array with dtype `uint32` containing the completely
           rendered game board from the last board repaint (which usually means
           the last game iteration; see `Engine` docs for details). Recall that
-          Python's `chr` method can turn `uint8` values into single-character
+          Python's `chr` method can turn `uint32` values into single-character
           strings.
       layers: A feature-map representation of `board` (and so also current to
           the last board repaint); specifically, a dict mapping all
@@ -338,10 +338,10 @@ class Sprite(object):
           begins, however, it is guaranteed to be None; the update that this
           Sprite produces then will be combined updates from other Things to
           generate the first observation of the game.
-      board: A 2-D numpy array with dtype `uint8` containing the completely
+      board: A 2-D numpy array with dtype `uint32` containing the completely
           rendered game board from the last board repaint (which usually means
           the last game iteration; see `Engine` docs for details). Recall that
-          Python's `chr` method can turn `uint8` values into single-character
+          Python's `chr` method can turn `uint32` values into single-character
           strings.
       layers: A feature-map representation of `board` (and so also current to
           the last board repaint); specifically, a dict mapping all characters

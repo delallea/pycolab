@@ -46,7 +46,7 @@ class Engine(object):
       their chosen action, and the `Engine` updates the board in response, which
       then becomes the observation returned to the player.
   * By default, observations are a single 2-D numpy array "board" with dtype
-      `uint8`, or, alternatively, a collection of binary masks (see
+      `uint32`, or, alternatively, a collection of binary masks (see
       `Observation` in `rendering.py`).
   * Values are painted onto the board by instances of `Backdrop`, `Sprite`,
       and `Drape`, which are described in detail in `things.py`. (Now would be
@@ -259,7 +259,7 @@ class Engine(object):
     """
     self._runtime_error_if_called_during_showtime('set_backdrop')
     return self.set_prefilled_backdrop(
-        characters, np.zeros((self._rows, self._cols), dtype=np.uint8),
+        characters, np.zeros((self._rows, self._cols), dtype=np.uint32),
         backdrop_class, *args, **kwargs)
 
   def set_prefilled_backdrop(
@@ -279,7 +279,7 @@ class Engine(object):
     Args:
       characters: A collection of ASCII characters that the `Backdrop` is
           allowed to use. (A string will work as an argument here.)
-      prefill: 2-D `uint8` numpy array of the same dimensions as this `Engine`.
+      prefill: 2-D `uint32` numpy array of the same dimensions as this `Engine`.
           The `Backdrop`'s curtain will be initialised with this pattern.
       backdrop_class: A subclass of `Backdrop` (including `Backdrop` itself)
           that will be constructed by this method.
@@ -309,7 +309,7 @@ class Engine(object):
                       'either be a Backdrop class or one of its subclasses.')
 
     # Construct a new curtain and palette for the Backdrop.
-    curtain = np.zeros((self._rows, self._cols), dtype=np.uint8)
+    curtain = np.zeros((self._rows, self._cols), dtype=np.uint32)
     palette = Palette(characters)
 
     # Fill the curtain with the prefill data.
@@ -857,7 +857,7 @@ class Engine(object):
 class Palette(object):
   """A helper class for turning human-readable characters into numerical values.
 
-  Classes like `Backdrop` need to assign certain `uint8` values to cells in the
+  Classes like `Backdrop` need to assign certain `uint32` values to cells in the
   game board. Since these values are typically printable ASCII characters, this
   assignment can be both cumbersome (e.g. `board[r][c] = ord('j')`) and error-
   prone (what if 'j' isn't a valid value for the Backdrop to use?).

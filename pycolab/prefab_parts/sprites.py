@@ -368,7 +368,7 @@ class MazeWalker(things.Sprite):
     5. Returning the success (None) or failure (see class docstring) result.
 
     Args:
-      board: a 2-D numpy array with dtype `uint8` containing the completely
+      board: a 2-D numpy array with dtype `uint32` containing the completely
           rendered game board from the last board repaint (which usually means
           the last game iteration; see `Engine` docs for details).
       the_plot: this pycolab game's `Plot` object.
@@ -461,7 +461,7 @@ class MazeWalker(things.Sprite):
     will be legal on the next game iteration. (See `protocols/scrolling.py`.)
 
     Args:
-      board: a 2-D numpy array with dtype `uint8` containing the completely
+      board: a 2-D numpy array with dtype `uint32` containing the completely
           rendered game board from the last board repaint (which usually means
           the last game iteration; see `Engine` docs for details).
       the_plot: this pycolab game's `Plot` object.
@@ -485,7 +485,7 @@ class MazeWalker(things.Sprite):
     confined to the game board, the edge of the game board may be blocking.
 
     Args:
-      board: a 2-D numpy array with dtype `uint8` containing the completely
+      board: a 2-D numpy array with dtype `uint32` containing the completely
           rendered game board from the last board repaint (which usually means
           the last game iteration; see `Engine` docs for details).
       motion: A 2-tuple containing the motion as `(δrow, δcol)`.

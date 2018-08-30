@@ -208,7 +208,7 @@ class Scrolly(things.Drape):
           'must be an ASCII character.')
 
       # Convert the pattern art into an array of character strings.
-      self._whole_pattern_art = ascii_art.ascii_art_to_uint8_nparray(
+      self._whole_pattern_art = ascii_art.ascii_art_to_uint32_nparray(
           whole_pattern_art)
       self._board_northwest_corner = self._whole_pattern_position(
           board_northwest_corner_mark, 'the Scrolly.PatternInfo constructor')

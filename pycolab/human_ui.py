@@ -334,7 +334,7 @@ class CursesUi(object):
         screen.move(row, leftmost_column)  # Move to start of this board row.
         # Display game board characters one-by-one. We iterate over them as
         # integer ASCII codepoints for easiest compatibility with python2/3.
-        for codepoint in six.iterbytes(board_line.tostring()):
+        for codepoint in board_line:
           screen.addch(
               codepoint, curses.color_pair(self._colour_pair[codepoint]))
 

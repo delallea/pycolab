@@ -197,15 +197,15 @@ def ascii_art_to_game(art,
 
   ### 3. Convert all ASCII art to numpy arrays ###
 
-  # Now convert the ASCII art array to a numpy array of uint8s.
-  art = ascii_art_to_uint8_nparray(art)
+  # Now convert the ASCII art array to a numpy array of uint32s.
+  art = ascii_art_to_uint32_nparray(art)
 
   # In preparation for masking out sprites and drapes from the ASCII art array
   # (to make the background), do similar for what_lies_beneath.
   if isinstance(what_lies_beneath, str):
     what_lies_beneath = np.full_like(art, ord(what_lies_beneath))
   else:
-    what_lies_beneath = ascii_art_to_uint8_nparray(what_lies_beneath)
+    what_lies_beneath = ascii_art_to_uint32_nparray(what_lies_beneath)
     if art.shape != what_lies_beneath.shape:
       raise ValueError(
           'if not a single ASCII character, what_lies_beneath must be ASCII '
@@ -268,7 +268,7 @@ def ascii_art_to_game(art,
 
   game.set_prefilled_backdrop(
       characters=''.join(chr(c) for c in np.unique(art)),
-      prefill=art.view(np.uint8),
+      prefill=art.view(np.uint32),
       backdrop_class=backdrop.pycolab_thing,
       *backdrop.args, **backdrop.kwargs)
 
@@ -276,11 +276,11 @@ def ascii_art_to_game(art,
   return game
 
 
-def ascii_art_to_uint8_nparray(art):
-  """Construct a numpy array of dtype `uint8` from an ASCII art diagram.
+def ascii_art_to_uint32_nparray(art):
+  """Construct a numpy array of dtype `uint32` from an ASCII art diagram.
 
   This function takes ASCII art diagrams (expressed as lists or tuples of
-  equal-length strings) and derives 2-D numpy arrays with dtype `uint8`.
+  equal-length strings) and derives 2-D numpy arrays with dtype `uint32`.
 
   Args:
     art: An ASCII art diagram; this should be a list or tuple whose values are
@@ -296,10 +296,10 @@ def ascii_art_to_uint8_nparray(art):
     TypeError: `art` was not a list of strings.
   """
   error_text = (
-      'the argument to ascii_art_to_uint8_nparray must be a list (or tuple) '
+      'the argument to ascii_art_to_uint32_nparray must be a list (or tuple) '
       'of strings containing the same number of strictly-ASCII characters.')
   try:
-    art = np.vstack(np.fromstring(line, dtype=np.uint8) for line in art)
+    art = np.vstack(np.array(list(map(ord, line)), dtype=np.uint32) for line in art)
   except ValueError as e:
     raise ValueError('{} (original error from numpy: {})'.format(error_text, e))
   except TypeError as e:
@@ -307,7 +307,6 @@ def ascii_art_to_uint8_nparray(art):
         isinstance(row, six.string_types) for row in art):
       error_text += ' Did you pass a list of list of single characters?'
     raise TypeError('{} (original error from numpy: {})'.format(error_text, e))
-  if np.any(art > 127): raise ValueError(error_text)
   return art
 
 
